@@ -1,233 +1,153 @@
 <template>
   <div class="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-slate-100 flex flex-col">
-    <!-- Header Component -->
-    <AppHeader 
-      :current-role="currentRole"
-      :active-category="activeCategory"
-      :categories="categories"
-      @update:role="setRole"
-      @update:category="setCategory"
-      @open-setup="showSetupModal = true"
-    />
+    <!-- Lost connection banner -->
+    <div
+      v-if="conn.ready && conn.session && !conn.connected"
+      class="sticky top-0 z-[60] bg-amber-500 text-slate-950 text-xs font-bold text-center px-4 py-2"
+    >
+      Connection to the tabulator lost — reconnecting… Scores can't be submitted until it's back.
+    </div>
 
-    <!-- Main Views Container -->
-    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-      <!-- Admin Tabulator View -->
-      <AdminDashboard
-        v-if="currentRole === 'admin'"
-        :categories="categories"
-        :contestants="contestants"
-        :scores="scores"
-        :active-category="activeCategory"
-        :is-locked="isCategoryLocked"
-        @add-contestant="addContestant"
-        @remove-contestant="removeContestant"
-        @add-category="addCategory"
-        @toggle-lock="toggleCategoryLock"
-        @reset-all="resetSystemData"
+    <!-- Waiting for the server -->
+    <div v-if="!conn.ready" class="flex-1 flex items-center justify-center p-6">
+      <div class="text-center space-y-3 max-w-sm">
+        <div class="mx-auto w-10 h-10 rounded-full border-4 border-pink-500/30 border-t-pink-500 animate-spin"></div>
+        <p class="text-sm font-semibold text-slate-200">Connecting to the tabulator…</p>
+        <p v-if="slowConnect" class="text-xs text-slate-400">
+          Taking a while. Make sure the tabulator laptop is running <code class="text-blue-300">npm run dev</code>
+          and that this device is on the same Wi-Fi.
+        </p>
+      </div>
+    </div>
+
+    <!-- Sign in -->
+    <LoginScreen v-else-if="!conn.session" />
+
+    <!-- Signed in -->
+    <template v-else>
+      <AppHeader
+        :session="conn.session"
+        :connected="conn.connected"
+        :active-category="state.activeCategory"
+        :categories="state.categories"
+        @update:category="setCategory"
+        @open-setup="showSetupModal = true"
+        @logout="logout"
       />
 
-      <!-- Judge Scoring View -->
-      <JudgePortal
-        v-else
-        :judge-id="currentRole"
-        :categories="categories"
-        :contestants="contestants"
-        :scores="scores"
-        :active-category="activeCategory"
-        :is-locked="isCategoryLocked"
-        @submit-score="handleScoreSubmit"
-      />
-    </main>
+      <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+        <AdminDashboard
+          v-if="isAdmin"
+          :categories="state.categories"
+          :contestants="state.contestants"
+          :judges="state.judges"
+          :scores="state.scores"
+          :active-category="state.activeCategory"
+          :is-locked="isCategoryLocked"
+          :server-addresses="state.serverAddresses"
+          @add-contestant="(c) => run(api.addContestant(c))"
+          @remove-contestant="removeContestant"
+          @add-category="(c) => run(api.addCategory(c), 'Category added.')"
+          @toggle-lock="(id) => run(api.toggleLock(id))"
+          @rename-judge="(id, name) => run(api.renameJudge(id, name), 'Judge name saved.')"
+          @regenerate-pin="regeneratePin"
+          @reset-all="resetSystemData"
+        />
 
-    <!-- Footer Component -->
+        <JudgePortal
+          v-else
+          :judge-id="conn.session.judgeId"
+          :judge-name="conn.session.name"
+          :categories="state.categories"
+          :contestants="state.contestants"
+          :scores="state.scores"
+          :active-category="state.activeCategory"
+          :is-locked="isCategoryLocked"
+          :connected="conn.connected"
+          :submit-score="api.submitScore"
+        />
+      </main>
+    </template>
+
     <AppFooter />
 
-    <!-- Setup / Local Hosting Guide Modal -->
-    <SetupModal 
-      v-if="showSetupModal" 
-      @close="showSetupModal = false" 
+    <SetupModal
+      v-if="showSetupModal"
+      :addresses="state.serverAddresses"
+      @close="showSetupModal = false"
     />
+
+    <!-- Toast -->
+    <transition name="fade">
+      <div
+        v-if="toast.text"
+        class="fixed bottom-4 left-1/2 -translate-x-1/2 z-[70] max-w-[calc(100%-2rem)] px-4 py-2.5 rounded-xl text-xs font-semibold shadow-2xl border"
+        :class="toast.type === 'error'
+          ? 'bg-rose-950 text-rose-200 border-rose-500/40'
+          : 'bg-emerald-950 text-emerald-200 border-emerald-500/40'"
+      >
+        {{ toast.text }}
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import AppHeader from './components/AppHeader.vue'
 import AppFooter from './components/AppFooter.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
 import JudgePortal from './components/JudgePortal.vue'
 import SetupModal from './components/SetupModal.vue'
+import LoginScreen from './components/LoginScreen.vue'
+import { conn, state, api, logout, toast, showToast } from './composables/useTabulator.js'
 
-// Local State
-const currentRole = ref('admin') // 'admin', 'judge1', 'judge2', 'judge3', 'judge4', 'judge5'
-const activeCategory = ref('cat_1')
 const showSetupModal = ref(false)
+const slowConnect = ref(false)
 
-const categories = ref([
-  {
-    id: 'cat_1',
-    name: 'Production Number & Casual Wear',
-    locked: false,
-    criteria: [
-      { id: 'crit_1', name: 'Poise & Bearing', maxScore: 40 },
-      { id: 'crit_2', name: 'Stage Presence', maxScore: 30 },
-      { id: 'crit_3', name: 'Overall Impact', maxScore: 30 }
-    ]
-  },
-  {
-    id: 'cat_2',
-    name: 'Formal Wear / Evening Gown',
-    locked: false,
-    criteria: [
-      { id: 'crit_4', name: 'Elegance & Carriage', maxScore: 40 },
-      { id: 'crit_5', name: 'Fit & Design', maxScore: 30 },
-      { id: 'crit_6', name: 'Poise & Confidence', maxScore: 30 }
-    ]
-  },
-  {
-    id: 'cat_3',
-    name: 'Question & Answer (Q&A)',
-    locked: false,
-    criteria: [
-      { id: 'crit_7', name: 'Intelligence & Substance', maxScore: 50 },
-      { id: 'crit_8', name: 'Delivery & Diction', maxScore: 30 },
-      { id: 'crit_9', name: 'Stage Presence', maxScore: 20 }
-    ]
-  }
-])
+onMounted(() => {
+  setTimeout(() => { slowConnect.value = true }, 4000)
+})
 
-const contestants = ref([
-  { id: 'c1', number: 1, name: 'Candidate 01', location: 'College of Engineering' },
-  { id: 'c2', number: 2, name: 'Candidate 02', location: 'College of Architecture' },
-  { id: 'c3', number: 3, name: 'Candidate 03', location: 'College of Computer Studies' },
-  { id: 'c4', number: 4, name: 'Candidate 04', location: 'College of Arts & Sciences' },
-  { id: 'c5', number: 5, name: 'Candidate 05', location: 'College of Business' },
-])
-
-// Scores structure: { categoryId: { contestantId: { judgeId: { criterionId: value } } } }
-const scores = reactive({})
-
-// Broadcast Channel for live multi-tab & local network sync
-let syncChannel = null
+const isAdmin = computed(() => conn.session?.role === 'admin')
 
 const isCategoryLocked = computed(() => {
-  const cat = categories.value.find(c => c.id === activeCategory.value)
+  const cat = state.categories.find(c => c.id === state.activeCategory)
   return cat ? cat.locked : false
 })
 
-// Persistence & Synchronization logic
-const saveState = () => {
-  const state = {
-    categories: categories.value,
-    contestants: contestants.value,
-    scores: scores,
-    activeCategory: activeCategory.value
-  }
-  localStorage.setItem('icpep_tabulator_state', JSON.stringify(state))
-  if (syncChannel) {
-    syncChannel.postMessage({ type: 'STATE_UPDATE', payload: state })
-  }
+// Run a server action and report failures to the user.
+const run = async (promise, successMessage) => {
+  const res = await promise
+  if (!res.ok) showToast(res.error, 'error')
+  else if (successMessage) showToast(successMessage)
+  return res
 }
 
-const loadState = () => {
-  const saved = localStorage.getItem('icpep_tabulator_state')
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved)
-      if (parsed.categories) categories.value = parsed.categories
-      if (parsed.contestants) contestants.value = parsed.contestants
-      if (parsed.scores) Object.assign(scores, parsed.scores)
-      if (parsed.activeCategory) activeCategory.value = parsed.activeCategory
-    } catch (e) {
-      console.error('Failed to parse local storage state:', e)
-    }
-  }
-}
-
-// Handlers
-const setRole = (role) => {
-  currentRole.value = role
-}
-
-const setCategory = (catId) => {
-  activeCategory.value = catId
-  saveState()
-}
-
-const handleScoreSubmit = ({ categoryId, contestantId, judgeId, criterionScores }) => {
-  if (!scores[categoryId]) scores[categoryId] = {}
-  if (!scores[categoryId][contestantId]) scores[categoryId][contestantId] = {}
-  
-  scores[categoryId][contestantId][judgeId] = { ...criterionScores }
-  saveState()
-}
-
-const addContestant = (contestant) => {
-  contestants.value.push({
-    id: 'c_' + Date.now(),
-    number: contestants.value.length + 1,
-    ...contestant
-  })
-  saveState()
-}
+const setCategory = (catId) => run(api.setActiveCategory(catId))
 
 const removeContestant = (id) => {
-  contestants.value = contestants.value.filter(c => c.id !== id)
-  saveState()
-}
-
-const addCategory = (categoryData) => {
-  categories.value.push({
-    id: 'cat_' + Date.now(),
-    locked: false,
-    ...categoryData
-  })
-  saveState()
-}
-
-const toggleCategoryLock = (catId) => {
-  const cat = categories.value.find(c => c.id === catId)
-  if (cat) {
-    cat.locked = !cat.locked
-    saveState()
+  const c = state.contestants.find(x => x.id === id)
+  if (confirm(`Remove ${c ? `#${c.number} ${c.name}` : 'this contestant'}? Their scores will be deleted too.`)) {
+    run(api.removeContestant(id))
   }
 }
 
-const resetSystemData = () => {
-  if (confirm('Are you sure you want to reset all contestants, criteria, and scores? This cannot be undone.')) {
-    localStorage.removeItem('icpep_tabulator_state')
-    window.location.reload()
-  }
+const regeneratePin = async (judgeId) => {
+  const judge = state.judges.find(j => j.id === judgeId)
+  if (!confirm(`Give ${judge?.name || judgeId} a new PIN? They will be signed out on every device and must sign in with the new PIN.`)) return
+  const res = await run(api.regenerateJudgePin(judgeId))
+  if (res.ok) showToast(`New PIN for ${judge?.name || judgeId}: ${res.pin}`)
 }
 
-// Lifecycle Hooks
-onMounted(() => {
-  loadState()
-
-  // Setup BroadcastChannel
-  if ('BroadcastChannel' in window) {
-    syncChannel = new BroadcastChannel('icpep_tabulator_channel')
-    syncChannel.onmessage = (event) => {
-      if (event.data && event.data.type === 'STATE_UPDATE') {
-        const payload = event.data.payload
-        if (payload.categories) categories.value = payload.categories
-        if (payload.contestants) contestants.value = payload.contestants
-        if (payload.scores) Object.assign(scores, payload.scores)
-        if (payload.activeCategory) activeCategory.value = payload.activeCategory
-      }
-    }
-  }
-
-  // Fallback to storage event for cross-window sync
-  window.addEventListener('storage', (e) => {
-    if (e.key === 'icpep_tabulator_state') {
-      loadState()
-    }
-  })
-})
-
-onUnmounted(() => {
-  if (syncChannel) syncChannel.close()
-})
+const resetSystemData = async () => {
+  if (!confirm('Reset all contestants, categories, and scores back to the defaults? Judges and PINs are kept. A backup file is saved first.')) return
+  const res = await run(api.resetAll())
+  if (res.ok) showToast('Data reset. A backup was saved in the data folder.')
+}
 </script>
+
+<style>
+.fade-enter-active, .fade-leave-active { transition: opacity .2s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+</style>

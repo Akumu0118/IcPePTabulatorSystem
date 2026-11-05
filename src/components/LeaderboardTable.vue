@@ -15,8 +15,8 @@
             <th class="py-3 px-4 text-center w-16">Rank</th>
             <th class="py-3 px-4">Candidate</th>
             <th class="py-3 px-4">Department / Representation</th>
-            <th v-for="j in judges" :key="j" class="py-3 px-3 text-center capitalize text-slate-300">
-              {{ j.replace('judge', 'Judge ') }}
+            <th v-for="j in judges" :key="j.id" class="py-3 px-3 text-center capitalize text-slate-300">
+              {{ j.name }}
             </th>
             <th class="py-3 px-4 text-center font-bold text-pink-400 bg-pink-500/5">Total Score</th>
           </tr>
@@ -56,9 +56,9 @@
             <td class="py-3 px-4 text-slate-400 text-xs">{{ item.location }}</td>
 
             <!-- Individual Judge Scores -->
-            <td v-for="j in judges" :key="j" class="py-3 px-3 text-center text-xs font-mono">
-              <span v-if="item.judgeScores[j] !== undefined" class="text-blue-300 font-semibold">
-                {{ item.judgeScores[j].toFixed(1) }}
+            <td v-for="j in judges" :key="j.id" class="py-3 px-3 text-center text-xs font-mono">
+              <span v-if="item.judgeScores[j.id] !== undefined" class="text-blue-300 font-semibold">
+                {{ item.judgeScores[j.id].toFixed(1) }}
               </span>
               <span v-else class="text-slate-600">-</span>
             </td>
@@ -103,14 +103,14 @@ const rankedContestants = computed(() => {
     const judgeScores = {}
 
     props.judges.forEach(j => {
-      const judgeObj = contestantScores[j]
+      const judgeObj = contestantScores[j.id]
       if (judgeObj) {
         // Sum score for all criteria
         let sumCriteria = 0
         Object.values(judgeObj).forEach(val => {
           sumCriteria += Number(val) || 0
         })
-        judgeScores[j] = sumCriteria
+        judgeScores[j.id] = sumCriteria
         totalSum += sumCriteria
         judgesCount++
       }

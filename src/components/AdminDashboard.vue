@@ -8,7 +8,7 @@
         </div>
         <div>
           <h2 class="text-base font-bold text-white">Tabulation & Leaderboard Overview</h2>
-          <p class="text-xs text-slate-400">Real-time calculations across all connected judge devices</p>
+          <p class="text-xs text-slate-400">Updates live as judges submit from their devices</p>
         </div>
       </div>
 
@@ -43,7 +43,7 @@
       :active-category-obj="currentCategoryObj"
       :contestants="contestants"
       :scores="scores"
-      :judges="['judge1', 'judge2', 'judge3', 'judge4', 'judge5']"
+      :judges="judges"
     />
 
     <!-- Admin Management Panels (Grid) -->
@@ -63,12 +63,21 @@
       />
     </div>
 
+    <!-- Judges, PINs and who is signed in -->
+    <JudgesAccessPanel
+      :judges="judges"
+      :server-addresses="serverAddresses"
+      @rename-judge="(id, name) => $emit('rename-judge', id, name)"
+      @regenerate-pin="$emit('regenerate-pin', $event)"
+    />
+
     <!-- Printable Modal Component -->
     <PrintTallyModal
       v-if="showPrintModal"
       :category="currentCategoryObj"
       :contestants="contestants"
       :scores="scores"
+      :judges="judges"
       @close="showPrintModal = false"
     />
   </div>
@@ -80,16 +89,19 @@ import LeaderboardTable from './LeaderboardTable.vue'
 import CriteriaManager from './CriteriaManager.vue'
 import ContestantManager from './ContestantManager.vue'
 import PrintTallyModal from './PrintTallyModal.vue'
+import JudgesAccessPanel from './JudgesAccessPanel.vue'
 
 const props = defineProps({
   categories: { type: Array, required: true },
   contestants: { type: Array, required: true },
+  judges: { type: Array, required: true },
+  serverAddresses: { type: Array, default: () => [] },
   scores: { type: Object, required: true },
   activeCategory: { type: String, required: true },
   isLocked: { type: Boolean, required: true }
 })
 
-defineEmits(['add-contestant', 'remove-contestant', 'add-category', 'toggle-lock', 'reset-all'])
+defineEmits(['add-contestant', 'remove-contestant', 'add-category', 'toggle-lock', 'reset-all', 'rename-judge', 'regenerate-pin'])
 
 const showPrintModal = ref(false)
 

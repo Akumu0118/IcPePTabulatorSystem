@@ -6,11 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "vite build && vite preview"
   },
   "dependencies": {
-    "vue": "^3.4.0",
-    "lucide-vue-next": "^0.344.0"
+    "lucide-vue-next": "^0.344.0",
+    "socket.io": "^4.8.4",
+    "socket.io-client": "^4.8.4",
+    "vue": "^3.4.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",

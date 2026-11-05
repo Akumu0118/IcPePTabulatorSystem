@@ -32,8 +32,8 @@
               <th class="border border-slate-400 p-2 text-center">Rank</th>
               <th class="border border-slate-400 p-2">Candidate Name</th>
               <th class="border border-slate-400 p-2">Department</th>
-              <th v-for="j in judges" :key="j" class="border border-slate-400 p-2 text-center capitalize">
-                {{ j.replace('judge', 'Judge ') }}
+              <th v-for="j in judges" :key="j.id" class="border border-slate-400 p-2 text-center capitalize">
+                {{ j.name }}
               </th>
               <th class="border border-slate-400 p-2 text-center font-black">Final Ave</th>
             </tr>
@@ -43,8 +43,8 @@
               <td class="border border-slate-400 p-2 text-center font-bold">{{ idx + 1 }}</td>
               <td class="border border-slate-400 p-2 font-bold">#{{ item.number }} {{ item.name }}</td>
               <td class="border border-slate-400 p-2 text-slate-600">{{ item.location }}</td>
-              <td v-for="j in judges" :key="j" class="border border-slate-400 p-2 text-center font-mono">
-                {{ item.judgeScores[j] !== undefined ? item.judgeScores[j].toFixed(1) : '-' }}
+              <td v-for="j in judges" :key="j.id" class="border border-slate-400 p-2 text-center font-mono">
+                {{ item.judgeScores[j.id] !== undefined ? item.judgeScores[j.id].toFixed(1) : '-' }}
               </td>
               <td class="border border-slate-400 p-2 text-center font-mono font-black text-sm">{{ item.finalAverage.toFixed(2) }}</td>
             </tr>
@@ -77,12 +77,12 @@ import { computed } from 'vue'
 const props = defineProps({
   category: { type: Object, required: true },
   contestants: { type: Array, required: true },
-  scores: { type: Object, required: true }
+  scores: { type: Object, required: true },
+  judges: { type: Array, required: true }
 })
 
 defineEmits(['close'])
 
-const judges = ['judge1', 'judge2', 'judge3', 'judge4', 'judge5']
 
 const sortedData = computed(() => {
   if (!props.category) return []
@@ -94,11 +94,11 @@ const sortedData = computed(() => {
     let count = 0
     const judgeScores = {}
 
-    judges.forEach(j => {
-      if (contestantScores[j]) {
+    props.judges.forEach(j => {
+      if (contestantScores[j.id]) {
         let sum = 0
-        Object.values(contestantScores[j]).forEach(v => sum += Number(v) || 0)
-        judgeScores[j] = sum
+        Object.values(contestantScores[j.id]).forEach(v => sum += Number(v) || 0)
+        judgeScores[j.id] = sum
         totalSum += sum
         count++
       }
