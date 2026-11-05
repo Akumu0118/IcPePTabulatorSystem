@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-slate-100 flex flex-col">
+  <div class="min-h-screen min-h-[100dvh] bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-slate-100 flex flex-col overflow-x-hidden antialiased">
     <!-- Header Component -->
     <AppHeader 
       :current-role="currentRole"
@@ -11,33 +11,37 @@
     />
 
     <!-- Main Views Container -->
-    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-      <!-- Admin Tabulator View -->
-      <AdminDashboard
-        v-if="currentRole === 'admin'"
-        :categories="categories"
-        :contestants="contestants"
-        :scores="scores"
-        :active-category="activeCategory"
-        :is-locked="isCategoryLocked"
-        @add-contestant="addContestant"
-        @remove-contestant="removeContestant"
-        @add-category="addCategory"
-        @toggle-lock="toggleCategoryLock"
-        @reset-all="resetSystemData"
-      />
+    <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 transition-all duration-300">
+      <Transition name="fade-slide" mode="out-in">
+        <!-- Admin Tabulator View -->
+        <AdminDashboard
+          v-if="currentRole === 'admin'"
+          :key="'admin-' + activeCategory"
+          :categories="categories"
+          :contestants="contestants"
+          :scores="scores"
+          :active-category="activeCategory"
+          :is-locked="isCategoryLocked"
+          @add-contestant="addContestant"
+          @remove-contestant="removeContestant"
+          @add-category="addCategory"
+          @toggle-lock="toggleCategoryLock"
+          @reset-all="resetSystemData"
+        />
 
-      <!-- Judge Scoring View -->
-      <JudgePortal
-        v-else
-        :judge-id="currentRole"
-        :categories="categories"
-        :contestants="contestants"
-        :scores="scores"
-        :active-category="activeCategory"
-        :is-locked="isCategoryLocked"
-        @submit-score="handleScoreSubmit"
-      />
+        <!-- Judge Scoring View -->
+        <JudgePortal
+          v-else
+          :key="currentRole + '-' + activeCategory"
+          :judge-id="currentRole"
+          :categories="categories"
+          :contestants="contestants"
+          :scores="scores"
+          :active-category="activeCategory"
+          :is-locked="isCategoryLocked"
+          @submit-score="handleScoreSubmit"
+        />
+      </Transition>
     </main>
 
     <!-- Footer Component -->
@@ -52,7 +56,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import AppHeader from './components/AppHeader.vue'
 import AppFooter from './components/AppFooter.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
@@ -231,3 +235,21 @@ onUnmounted(() => {
   if (syncChannel) syncChannel.close()
 })
 </script>
+
+<style scoped>
+/* Smooth view switching transitions */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+</style>
